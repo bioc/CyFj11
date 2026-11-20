@@ -1,3 +1,24 @@
+# CyFj11 0.99.115
+
+* Fixed ellipse gates for all analysis schema versions. FlowJo stores an
+  ellipse as the corners of the unrotated bounding box plus a rotation angle;
+  the covariance now puts the semi-axis `|dx|/2` along the rotated x direction
+  and `|dy|/2` perpendicular to it. Earlier versions swapped the semi-axes and
+  reversed the rotation (schema 4.0.0 was already corrected in 0.99.114; older
+  schemas kept the wrong convention). On a FlowJo 11.2 test workspace with
+  elongated ellipses at many rotations, event counts now agree with FlowJo to
+  within a few events on linear axes, for gates drawn at resolution 256 and
+  1024. This changes the counts of ellipse gates in existing analyses of
+  schema 3.0.0 workspaces: horizontal and vertical ellipses were most affected.
+* Fixed ellipse gates on Biex axes, which previously matched no events. Gate
+  coordinates are now rescaled from the gate resolution to the transform's
+  `vectorLength` (for example gates drawn at 1024 with a Biex transform of
+  vector length 256). The same rescaling applies to other gate types on Biex
+  axes. Biex ellipse counts agree with FlowJo to within about 4%; the
+  remaining difference is not yet explained.
+* The ellipse convention no longer depends on the schema version.
+* Added a regression test with FlowJo's counts for nine ellipse gates.
+
 # CyFj11 0.99.114
 
 * Support for FlowJo 11.3 workspaces (analysis schema 4.0.0). Gates on
