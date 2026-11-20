@@ -293,7 +293,7 @@ display_to_raw <- function(
         )
     } else if (trans_type == "Biex") {
         display_to_raw_biex(display_coords, transform_spec,
-            use_transformed_coords)
+            use_transformed_coords, gate_resolution)
     } else if (trans_type == "Log") {
         display_to_raw_log(
             display_coords, transform_spec,
@@ -348,10 +348,15 @@ display_to_raw_linear <- function(display_coords, transform_spec,
 #' @param display_coords Numeric coordinates in display space
 #' @param transform_spec Transform specification from the gate axis
 #' @param use_transformed_coords Keep coordinates in transformed space?
+#' @param gate_resolution Gate resolution used to draw the gate
 #' @return Numeric vector of coordinates in raw data space
 #' @noRd
 display_to_raw_biex <- function(display_coords, transform_spec,
-    use_transformed_coords) {
+    use_transformed_coords, gate_resolution = NULL) {
+    # Gate coordinates are in gate-resolution units; the transform works in
+    # vectorLength units (e.g. gates at 1024, Biex vectorLength 256).
+    display_coords <- display_coords *
+        transform_scale_factor(transform_spec, gate_resolution)
     if (isTRUE(use_transformed_coords)) {
         # Data will be in transformed space (0-channelRange).
         # FlowJo display coords ARE the transformed coords. Return as-is.
@@ -705,10 +710,12 @@ gate_ellipse_geometry <- function(gate, x_display, y_display, gate_resolution,
         gate$xAxis$transform$vectorLength %||% 256
 
     scale_x <- gate_ellipse_axis_scale(
-        gate$xAxis$transform, vector_length, correct_faulty_gate
+        gate$xAxis$transform, vector_length, correct_faulty_gate,
+        use_transformed_coords
     )
     scale_y <- gate_ellipse_axis_scale(
-        gate$yAxis$transform, vector_length, correct_faulty_gate
+        gate$yAxis$transform, vector_length, correct_faulty_gate,
+        use_transformed_coords
     )
 
     # Scale covariance matrix: Cov_raw = S * Cov_display * S^T
@@ -721,17 +728,19 @@ gate_ellipse_geometry <- function(gate, x_display, y_display, gate_resolution,
 
 #' Build the ellipse covariance matrix in display space
 #'
-#' From analysis schema 4.0.0 (FlowJo 11.3) on, the semi-axis \code{a} lies
-#' along the direction (cos, sin) of the rotation angle and \code{b}
-#' perpendicular to it, i.e. Sigma = R diag(a^2, b^2) R^T. This reproduces
-#' FlowJo's own counts. Workspaces with an older or unknown schema version keep
-#' the convention used by CyFj11 up to 0.99.113 (semi-axes swapped, rotation
-#' reversed) so that earlier results stay reproducible.
+#' FlowJo stores the ellipse as the corners of the unrotated bounding box
+#' (\code{xVertices}, \code{yVertices}) plus a rotation angle in degrees. The
+#' semi-axis \code{a = |dx|/2} lies along the direction (cos, sin) of the
+#' rotation angle and \code{b = |dy|/2} perpendicular to it, i.e.
+#' Sigma = R diag(a^2, b^2) R^T. This reproduces FlowJo's own event counts at
+#' gate resolutions 256 and 1024, on Linear and Biex axes, for analysis schema
+#' 3.0.0 and 4.0.0 (FlowJo 11.2 and 11.3). CyFj11 up to 0.99.114 used swapped
+#' semi-axes with reversed rotation for schema < 4.0.0; that was a bug.
 #'
-#' @param a_display Semi-major axis length
-#' @param b_display Semi-minor axis length
+#' @param a_display Semi-axis length along x before rotation
+#' @param b_display Semi-axis length along y before rotation
 #' @param angle_rad Rotation angle in radians
-#' @param schema_version Analysis schema version (\code{numeric_version} or NULL)
+#' @param schema_version Unused; kept for call compatibility
 #' @return 2x2 covariance matrix
 #' @noRd
 gate_ellipse_cov_display <- function(a_display, b_display, angle_rad,
@@ -739,13 +748,8 @@ gate_ellipse_cov_display <- function(a_display, b_display, angle_rad,
     cos_a <- cos(angle_rad)
     sin_a <- sin(angle_rad)
 
-    if (schema_at_least(schema_version, "4.0.0")) {
-        diag_x <- a_display^2 * cos_a^2 + b_display^2 * sin_a^2
-        diag_y <- a_display^2 * sin_a^2 + b_display^2 * cos_a^2
-    } else {
-        diag_x <- a_display^2 * sin_a^2 + b_display^2 * cos_a^2
-        diag_y <- a_display^2 * cos_a^2 + b_display^2 * sin_a^2
-    }
+    diag_x <- a_display^2 * cos_a^2 + b_display^2 * sin_a^2
+    diag_y <- a_display^2 * sin_a^2 + b_display^2 * cos_a^2
     off <- (a_display^2 - b_display^2) * sin_a * cos_a
 
     matrix(c(diag_x, off, off, diag_y), nrow = 2, ncol = 2)
@@ -753,19 +757,25 @@ gate_ellipse_cov_display <- function(a_display, b_display, angle_rad,
 
 #' Per-axis display-to-data scale factor for ellipse covariance
 #'
-#' For Linear transforms: scale from display to data. For other types
-#' (e.g. Biex): scaling is approximately 1 near the center (simplified).
+#' Linear: display units to raw units. Non-linear axes with data kept in
+#' transformed space (\code{use_transformed_coords}): gate units to the
+#' transform's \code{vectorLength} units. Non-linear axes in raw space: 1
+#' (the gate is not an ellipse there; approximation only).
 #'
 #' @param axis_transform Axis transform spec
-#' @param vector_length Display space range
+#' @param vector_length Gate resolution (display space range)
 #' @param correct_faulty_gate Fallback maxRange value if maxRange=0
+#' @param use_transformed_coords Data kept in transformed space?
 #' @return Numeric scale factor
 #' @noRd
 gate_ellipse_axis_scale <- function(axis_transform, vector_length,
-    correct_faulty_gate) {
+    correct_faulty_gate, use_transformed_coords = FALSE) {
     trans_type <- axis_transform$transformType %||% "Linear"
 
     if (trans_type != "Linear") {
+        if (isTRUE(use_transformed_coords)) {
+            return(transform_scale_factor(axis_transform, vector_length))
+        }
         return(1)
     }
 
@@ -774,6 +784,14 @@ gate_ellipse_axis_scale <- function(axis_transform, vector_length,
         max_range <- correct_faulty_gate
     }
     max_range / vector_length
+}
+
+#' Factor converting gate-resolution units to the transform's own scale
+#' @noRd
+transform_scale_factor <- function(transform_spec, gate_resolution = NULL) {
+    target <- transform_spec$vectorLength %||% 256
+    source <- gate_resolution %||% target
+    target / source
 }
 
 #' Convert Range Gate (1D)

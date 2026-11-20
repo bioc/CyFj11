@@ -20,14 +20,14 @@ test_that("ellipse gates follow plain geometry of FlowJo's vertices and rotation
   expect_gt(mean(got == want), 0.999)
   expect_gt(sum(want), 100)
 
-  # older / unknown schema versions keep the legacy convention (backward compatible)
-  legacy <- CyFj11:::convert_ellipse_gate(gate, "e", 0, -4000, schema_version = numeric_version("3.0.0"))
+  # the convention no longer depends on the schema version
+  old <- CyFj11:::convert_ellipse_gate(gate, "e", 0, -4000, schema_version = numeric_version("3.0.0"))
   unknown <- CyFj11:::convert_ellipse_gate(gate, "e", 0, -4000)
-  expect_equal(legacy@cov, unknown@cov)
-  expect_false(isTRUE(all.equal(legacy@cov, eg@cov)))
+  expect_equal(old@cov, eg@cov)
+  expect_equal(unknown@cov, eg@cov)
 })
 
-test_that("schema version reaches ellipse gates through extract_all_gates", {
+test_that("ellipse convention is schema independent through extract_all_gates", {
   gate <- list(
     type = "ellipse",
     xVertices = list(47.2, 151), yVertices = list(67.9, 15.9), rotationAngle = 10.6,
@@ -41,5 +41,5 @@ test_that("schema version reaches ellipse gates through extract_all_gates", {
   old <- CyFj11:::extract_all_gates(pd, "s1", schema_version = numeric_version("3.0.0"))
   expect_length(new, 1L)
   expect_length(old, 1L)
-  expect_false(isTRUE(all.equal(new[[1]]@cov, old[[1]]@cov)))
+  expect_equal(new[[1]]@cov, old[[1]]@cov)
 })
