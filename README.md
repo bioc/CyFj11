@@ -1,6 +1,6 @@
 # CyFj11: Parse and Extract Data from FlowJo v11 Workspace Files
 
-[![Bioconductor Build](https://bioconductor.org/shields/build/devel/bioc/CyFj11.svg)](https://bioconductor.org/checkresults/devel/bioc-LATEST/CyFj11/)
+[![Bioconductor Build](https://bioconductor.org/shields/build/devel/bioc/CyFj11.svg)](https://bioconductor.org/checkResults/devel/bioc-LATEST/CyFj11/)
 [![Bioconductor Dependencies](https://bioconductor.org/shields/dependencies/devel/CyFj11.svg)](https://bioconductor.org/packages/devel/bioc/html/CyFj11.html)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
